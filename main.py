@@ -18,8 +18,8 @@ def index():
 def sync():
     data = request.get_json()
 
-    if not data or not data.get('document_number', '').startswith('test'):
-        return jsonify({'message': 'Skipping, document number does not start with "test"'}), 200
+    if not data:
+        return jsonify({'message': 'No valid data provided'}), 400
 
     org = find_or_create_organization(data)
     person = find_or_create_person(data, org)
