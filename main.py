@@ -1,10 +1,15 @@
-from flask import Flask, request
+import os
 import requests
 import json
+from flask import Flask, request
 
 app = Flask(__name__)
 
-PIPEDRIVE_API_TOKEN = 'TAVS_PIPEDRIVE_API_TOKEN'
+# Iegūst Pipedrive API token no vides mainīgajiem
+PIPEDRIVE_API_TOKEN = os.environ.get("PIPEDRIVE_API_TOKEN")
+if not PIPEDRIVE_API_TOKEN:
+    raise Exception("PIPEDRIVE_API_TOKEN nav iestatīts vides mainīgajos!")
+
 PIPEDRIVE_API_URL = 'https://api.pipedrive.com/v1'
 
 @app.route('/', methods=['GET'])
@@ -15,7 +20,7 @@ def index():
 def sync_paytraq_to_pipedrive():
     data = request.get_json()
 
-    # Darījuma nosaukuma pārbaude
+    # Darījuma nosaukuma pārbaude – ja nav "test", tad neko nedarām.
     if not data or not data.get('order_name', '').startswith('test'):
         return json.dumps({'message': 'Not a test order, skipping'}), 200
 
@@ -64,6 +69,5 @@ def attach_product_to_deal(deal_id, product_id, price):
     requests.post(url, json=payload)
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
