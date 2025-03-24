@@ -1,80 +1,69 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import requests
+import json
 
 app = Flask(__name__)
 
-# Pipedrive API konfigurācija
-api_token = "7f1dec3f4a486b427cedac03293c65053def753b"
-base_url = "https://api.pipedrive.com/v1"
+PIPEDRIVE_API_TOKEN = 'TAVS_PIPEDRIVE_API_TOKEN'
+PIPEDRIVE_API_URL = 'https://api.pipedrive.com/v1'
 
-@app.route("/", methods=["POST"])
-def webhook():
-    data = request.json
-    deal_name = data.get("name")
+@app.route('/', methods=['GET'])
+def index():
+    return 'Service is up and running!'
 
-    if not deal_name or not deal_name.startswith("test"):
-        return jsonify({"message": "Darījums nav test!"}), 400
+@app.route('/sync', methods=['POST'])
+def sync_paytraq_to_pipedrive():
+    data = request.get_json()
 
-    # Meklējam klientu pēc e-pasta
-    email = data.get("email", "raivis.zvejnieks@gmail.com")
-    search_url = f"{base_url}/persons/search"
-    params = {
-        "term": email,
-        "fields": "email",
-        "api_token": api_token
-    }
-    response = requests.get(search_url, params=params)
-    results = response.json()
+    # Darījuma nosaukuma pārbaude
+    if not data or not data.get('order_name', '').startswith('test'):
+        return json.dumps({'message': 'Not a test order, skipping'}), 200
 
-    if results['success'] and results['data']['items']:
-        clients = [item['item'] for item in results['data']['items']]
-        client = min(clients, key=lambda x: x['id'])
-        person_id = client['id']
+    # Meklējam klientu pēc e-pasta Pipedrive
+    email = data.get('email')
+    person = search_person_by_email(email)
 
-        # Izveidojam Deal
-        deal_url = f"{base_url}/deals?api_token={api_token}"
-        deal_data = {
-            "title": deal_name,
-            "person_id": person_id,
-            "value": 2.00,
-            "currency": "EUR"
-        }
-        deal_response = requests.post(deal_url, json=deal_data)
-        deal_result = deal_response.json()
+    if not person:
+        person = create_person(data.get('client_name'), email)
 
-        if deal_result['success']:
-            deal_id = deal_result['data']['id']
+    deal = create_deal(data.get('order_name'), person['id'])
 
-            # Meklējam produktu pēc koda
-            product_code = "testa11"
-            product_search_url = f"{base_url}/products/search"
-            params = {
-                "term": product_code,
-                "fields": "code",
-                "api_token": api_token
-            }
-            product_response = requests.get(product_search_url, params=params)
-            product_result = product_response.json()
+    product = add_product_to_pipedrive('Test Product', 2.00)
+    attach_product_to_deal(deal['id'], product['id'], 2.00)
 
-            if product_result['success'] and product_result['data']['items']:
-                product = product_result['data']['items'][0]['item']
-                product_id = product['id']
+    return json.dumps({'message': 'Deal created successfully!'}), 200
 
-                # Pievienojam produktu Deal
-                add_product_url = f"{base_url}/deals/{deal_id}/products?api_token={api_token}"
-                product_data = {
-                    "product_id": int(product_id),
-                    "item_price": 2.00,
-                    "quantity": 1
-                }
-                add_product_response = requests.post(add_product_url, json=product_data)
-                return jsonify({"message": "Deal izveidots un produkts pievienots!"})
+def search_person_by_email(email):
+    url = f'{PIPEDRIVE_API_URL}/persons/search'
+    params = {'term': email, 'fields': 'email', 'api_token': PIPEDRIVE_API_TOKEN}
+    response = requests.get(url, params=params).json()
+    items = response.get('data', {}).get('items', [])
+    return items[0]['item'] if items else None
 
-    return jsonify({"message": "Kaut kas nogāja greizi!"}), 500
+def create_person(name, email):
+    url = f'{PIPEDRIVE_API_URL}/persons'
+    payload = {'name': name, 'email': email, 'api_token': PIPEDRIVE_API_TOKEN}
+    response = requests.post(url, json=payload).json()
+    return response['data']
 
-@app.route("/", methods=["GET"])
-def health_check():
-    return "Service running"
+def create_deal(title, person_id):
+    url = f'{PIPEDRIVE_API_URL}/deals'
+    payload = {'title': title, 'person_id': person_id, 'api_token': PIPEDRIVE_API_TOKEN}
+    response = requests.post(url, json=payload).json()
+    return response['data']
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+def add_product_to_pipedrive(name, price):
+    url = f'{PIPEDRIVE_API_URL}/products'
+    payload = {'name': name, 'prices': [{'currency': 'EUR', 'price': price}], 'api_token': PIPEDRIVE_API_TOKEN}
+    response = requests.post(url, json=payload).json()
+    return response['data']
+
+def attach_product_to_deal(deal_id, product_id, price):
+    url = f'{PIPEDRIVE_API_URL}/deals/{deal_id}/products'
+    payload = {'product_id': product_id, 'item_price': price, 'quantity': 1, 'api_token': PIPEDRIVE_API_TOKEN}
+    requests.post(url, json=payload)
+
+if __name__ == '__main__':
+    import os
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
