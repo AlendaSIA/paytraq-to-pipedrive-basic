@@ -5,11 +5,7 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-# Iegūst Pipedrive API token no vides mainīgajiem
 PIPEDRIVE_API_TOKEN = os.environ.get("PIPEDRIVE_API_TOKEN")
-if not PIPEDRIVE_API_TOKEN:
-    raise Exception("PIPEDRIVE_API_TOKEN nav iestatīts vides mainīgajos!")
-
 PIPEDRIVE_API_URL = 'https://api.pipedrive.com/v1'
 
 @app.route('/', methods=['GET'])
