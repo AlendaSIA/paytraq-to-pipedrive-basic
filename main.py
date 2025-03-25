@@ -16,9 +16,17 @@ STAGE_ID = 5      # Ienācis Pasūtījums
 def index():
     return "Service is up and running!"
 
+@app.route('/get-paytraq-orders', methods=['GET'])
+def route_exists_check():
+    return jsonify({"message": "Use POST to submit PayTraq XML data."}), 405
+
 @app.route('/get-paytraq-orders', methods=['POST'])
 def get_paytraq_orders():
     try:
+        # Pārliecināmies, ka ir XML
+        if not request.content_type or "xml" not in request.content_type:
+            return jsonify({"error": "Unsupported Content-Type. Use application/xml."}), 415
+
         xml_data = request.data
         root = ET.fromstring(xml_data)
 
@@ -43,7 +51,7 @@ def get_paytraq_orders():
         print("KĻŪDA:", str(e))
         traceback.print_exc()
         return jsonify({
-            "paytraq_status": "success",
+            "paytraq_status": "error",
             "sync_status": 500,
             "sync_response": f"Server error: {str(e)}"
         })
