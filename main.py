@@ -23,7 +23,14 @@ def route_exists_check():
 @app.route('/get-paytraq-orders', methods=['POST'])
 def get_paytraq_orders():
     try:
-        # Pārliecināmies, ka ir XML
+        print("\n==============================")
+        print("SAŅEMTS PIEPRASĪJUMS UZ /get-paytraq-orders")
+        print("Content-Type:", request.content_type)
+
+        raw_xml = request.data.decode("utf-8")
+        print("Raw XML saturs:")
+        print(raw_xml)
+
         if not request.content_type or "xml" not in request.content_type:
             return jsonify({"error": "Unsupported Content-Type. Use application/xml."}), 415
 
@@ -36,6 +43,12 @@ def get_paytraq_orders():
         client_name = root.findtext(".//Client//Name")
         email = root.findtext(".//Client//Email")
 
+        print("---- Izvilktie lauki ----")
+        print("Document number:", document_number)
+        print("Registration number:", registration_number)
+        print("Client name:", client_name)
+        print("Email:", email)
+
         data = {
             "document_number": document_number,
             "registration_number": registration_number,
@@ -44,10 +57,12 @@ def get_paytraq_orders():
         }
 
         print("DEBUG datu struktūra:", data)
+        print("==============================\n")
 
         return sync_internal(data)
 
     except Exception as e:
+        print("\n==== KĻŪDA SAŅEMOT /get-paytraq-orders ====")
         print("KĻŪDA:", str(e))
         traceback.print_exc()
         return jsonify({
@@ -65,9 +80,15 @@ def sync_internal(data):
     if not data:
         return jsonify({'message': 'No valid data provided'}), 400
 
+    print(">>> START sync_internal")
     org = find_or_create_organization(data)
+    print(">>> ORGANIZATION OK:", org.get('name') if org else "Nav")
+
     person = find_or_create_person(data, org)
+    print(">>> PERSON OK:", person.get('name') if person else "Nav")
+
     deal = create_deal(data.get('document_number', 'Pasūtījums'), org['id'], person['id'])
+    print(">>> DEAL izveidots:", deal.get('title'))
 
     return jsonify({'message': 'Deal created successfully', 'deal': deal}), 200
 
