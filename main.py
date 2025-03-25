@@ -35,7 +35,8 @@ def get_paytraq_orders():
             "email": email
         }
 
-        # Iekšēji padodam uz sync funkciju, lai nav jāsauc ārēji
+        print("DEBUG datu struktūra:", data)
+
         return sync_internal(data)
 
     except Exception as e:
@@ -58,7 +59,7 @@ def sync_internal(data):
 
     org = find_or_create_organization(data)
     person = find_or_create_person(data, org)
-    deal = create_deal(data['document_number'], org['id'], person['id'])
+    deal = create_deal(data.get('document_number', 'Pasūtījums'), org['id'], person['id'])
 
     return jsonify({'message': 'Deal created successfully', 'deal': deal}), 200
 
@@ -92,7 +93,7 @@ def search_organization_by_email(email):
 def create_organization(data):
     url = f"{PIPEDRIVE_API_URL}/organizations"
     payload = {
-        "name": data['client_name'],
+        "name": data.get('client_name', 'Klients'),
         "email": data.get('email', ''),
         "custom_fields": {"reg_nr": data.get('registration_number', '')},
         "api_token": PIPEDRIVE_API_TOKEN
@@ -109,7 +110,7 @@ def find_or_create_person(data, org):
         return items[0]['item']
 
     payload = {
-        "name": data['client_name'],
+        "name": data.get('client_name', 'Kontakts'),
         "email": data.get('email', ''),
         "org_id": org['id'],
         "api_token": PIPEDRIVE_API_TOKEN
