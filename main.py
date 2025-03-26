@@ -17,37 +17,34 @@ def index():
     return "Service is up and running!"
 
 @app.route('/get-paytraq-orders', methods=['GET'])
-def route_exists_check():
+def get_orders_info():
     return jsonify({"message": "Use POST to submit PayTraq XML data."}), 405
 
 @app.route('/get-paytraq-orders', methods=['POST'])
 def get_paytraq_orders():
     try:
-        print("\n==============================")
-        print("SAŅEMTS PIEPRASĪJUMS UZ /get-paytraq-orders")
+        print("\n📥 SAŅEMTS PIEPRASĪJUMS UZ /get-paytraq-orders")
         print("Content-Type:", request.content_type)
-
-        raw_xml = request.data.decode("utf-8")
-        print("Raw XML saturs:")
-        print(raw_xml)
 
         if not request.content_type or "xml" not in request.content_type:
             return jsonify({"error": "Unsupported Content-Type. Use application/xml."}), 415
 
-        xml_data = request.data
-        root = ET.fromstring(xml_data)
+        raw_xml = request.data.decode("utf-8")
+        print("🔍 XML saturs:\n", raw_xml)
 
-        # Izvilkšana no XML
-        document_number = root.findtext(".//DocumentRef")
-        registration_number = root.findtext(".//Client//RegistrationNumber")
-        client_name = root.findtext(".//Client//Name")
-        email = root.findtext(".//Client//Email")
+        root = ET.fromstring(raw_xml)
 
-        print("---- Izvilktie lauki ----")
-        print("Document number:", document_number)
-        print("Registration number:", registration_number)
-        print("Client name:", client_name)
-        print("Email:", email)
+        # Izvelkam laukus no XML
+        document_number = root.findtext(".//DocumentRef", default="—")
+        registration_number = root.findtext(".//Client//RegistrationNumber", default="—")
+        client_name = root.findtext(".//Client//Name", default="—")
+        email = root.findtext(".//Client//Email", default="—")
+
+        print("✅ Izvilktie dati:")
+        print(f"  Dokumenta Nr: {document_number}")
+        print(f"  Reģ. Nr: {registration_number}")
+        print(f"  Klients: {client_name}")
+        print(f"  E-pasts: {email}")
 
         data = {
             "document_number": document_number,
@@ -56,47 +53,49 @@ def get_paytraq_orders():
             "email": email
         }
 
-        print("DEBUG datu struktūra:", data)
-        print("==============================\n")
-
         return sync_internal(data)
 
     except Exception as e:
-        print("\n==== KĻŪDA SAŅEMOT /get-paytraq-orders ====")
-        print("KĻŪDA:", str(e))
+        print("\n❌ KĻŪDA SAŅEMOT /get-paytraq-orders")
         traceback.print_exc()
         return jsonify({
             "paytraq_status": "error",
             "sync_status": 500,
             "sync_response": f"Server error: {str(e)}"
-        })
+        }), 500
 
 @app.route('/sync', methods=['POST'])
 def sync():
-    data = request.get_json()
-    return sync_internal(data)
+    try:
+        data = request.get_json()
+        print("📦 Saņemts JSON uz /sync:", data)
+        return sync_internal(data)
+    except Exception as e:
+        print("❌ Kļūda sync endpointā:", str(e))
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 def sync_internal(data):
     if not data:
         return jsonify({'message': 'No valid data provided'}), 400
 
-    print(">>> START sync_internal")
+    print("\n🔄 START sync_internal()")
     org = find_or_create_organization(data)
-    print(">>> ORGANIZATION OK:", org.get('name') if org else "Nav")
+    print("🏢 ORGANIZĀCIJA:", org.get('name') if org else "Nav atrasta")
 
     person = find_or_create_person(data, org)
-    print(">>> PERSON OK:", person.get('name') if person else "Nav")
+    print("👤 PERSONA:", person.get('name') if person else "Nav atrasta")
 
     deal = create_deal(data.get('document_number', 'Pasūtījums'), org['id'], person['id'])
-    print(">>> DEAL izveidots:", deal.get('title'))
+    print("💼 DEAL:", deal.get('title'))
 
     return jsonify({'message': 'Deal created successfully', 'deal': deal}), 200
 
 def find_or_create_organization(data):
     reg_nr = data.get('registration_number', '')
     email = data.get('email', '')
-
     org = None
+
     if len(reg_nr) > 3:
         org = search_organization_by_custom_field('reg_nr', reg_nr)
     if not org and len(email) > 3:
